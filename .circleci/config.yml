@@ -1,0 +1,697 @@
+version: 2.1
+
+jobs:
+  dnsZoneLint:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - checkout
+      - run:
+          name: Restore vendored sources
+          command: tar xzf egg.tgz
+      - run:
+          name: Provision build deps
+          command: sudo apt-get update && sudo apt-get install -y cmake g++
+      - run:
+          name: Zone file
+          command: |
+            printf '$ORIGIN example.test.\n@ IN SOA ns1 admin 2026102801 3600 900 604800 86400\n' > zone.db
+      - run:
+          name: make
+          command: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --target dnsZoneLint -j2
+      - run:
+          name: Lint zone and check serial
+          command: ./build/dnsZoneLint zone.db --strict
+  walnut:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - checkout
+      - run:
+          name: Fetch fixtures
+          command: tar xzf egg.tgz
+      - run:
+          name: Install prerequisites
+          command: sudo apt-get update && sudo apt-get install -y cmake g++
+      - run:
+          name: Rule overrides
+          command: |
+            ( echo 'no-unused-vars: error' > .lintrc; echo 'max-len: 100' >> .lintrc )
+      - run:
+          name: npm run build
+          command: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --target walnut -j2
+      - run:
+          name: Lint 4k files with cache
+          command: ./build/walnut src/ --cache --max-warnings 0
+  InvMppt:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - checkout
+      - run:
+          name: Sync asset bundles
+          command: tar xzf egg.tgz
+      - run:
+          name: Provision compiler
+          command: sudo apt-get update && sudo apt-get install -y cmake g++
+      - run:
+          name: IV curve points
+          command: |
+            awk 'BEGIN{for(v=0;v<=40;v+=0.5)printf "%.1f %.3f\n",v,8*(1-exp((v-42)/2))}' > iv.txt
+      - run:
+          name: make
+          command: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --target InvMppt -j2
+      - run:
+          name: Perturb-and-observe tracking
+          command: ./build/InvMppt --step 0.2 --dt 50ms
+  fuel-plan-rcss:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - checkout
+      - run:
+          name: Unpack toolkit
+          command: tar xzf egg.tgz
+      - run:
+          name: Install toolchain
+          command: sudo apt-get update && sudo apt-get install -y cmake g++
+      - run:
+          name: Route waypoints
+          command: |
+            [ -s route.txt ] || echo RCSS RCKH RCTP|xargs -n1 > route.txt
+      - run:
+          name: gradle build
+          command: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --target fuel-plan-rcss -j2
+      - run:
+          name: Fuel with alternates and reserves
+          command: ./build/fuel-plan-rcss route.txt --alt RCTP --payload 4200
+  leaf_wetness:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - checkout
+      - run:
+          name: Hydrate workspace
+          command: tar xzf egg.tgz
+      - run:
+          name: Bootstrap toolchain
+          command: sudo apt-get update && sudo apt-get install -y cmake g++
+      - run:
+          name: Sensor hourly series
+          command: |
+            seq 0 167|awk '{print $1, (($1%24)<6)?1:0}' > wet.txt
+      - run:
+          name: Arduino CLI compile
+          command: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --target leaf_wetness -j2
+      - run:
+          name: Fungal infection risk index
+          command: ./build/leaf_wetness wet.txt --crop grape --model fast
+  sched-cfs-sim:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - checkout
+      - run:
+          name: Extract sources
+          command: tar xzf egg.tgz
+      - run:
+          name: Prepare build environment
+          command: sudo apt-get update && sudo apt-get install -y cmake g++
+      - run:
+          name: Thread mix
+          command: |
+            printf 'cpu %d\nio %d\n' 8 24 > mix.txt
+      - run:
+          name: cargo build --release --features serde
+          command: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --target sched-cfs-sim -j2
+      - run:
+          name: Simulate 10 s of CFS
+          command: ./build/sched-cfs-sim mix.txt --cores 4 --seconds 10
+  crosswordFill:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - checkout
+      - run:
+          name: Restore build cache
+          command: tar xzf egg.tgz
+      - run:
+          name: Install build tools
+          command: sudo apt-get update && sudo apt-get install -y cmake g++
+      - run:
+          name: Grid template
+          command: |
+            touch grid.txt && printf '%s\n' '#..#.' '.....' '..#..' '.....' '.#..#' >> grid.txt
+      - run:
+          name: Compile with g++ -O2
+          command: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --target crosswordFill -j2
+      - run:
+          name: Fill with dictionary, backtracking
+          command: ./build/crosswordFill grid.txt --dict words.txt
+  PcbDefect:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - checkout
+      - run:
+          name: Pull reference data
+          command: tar xzf egg.tgz
+      - run:
+          name: Provision SDK
+          command: sudo apt-get update && sudo apt-get install -y cmake g++
+      - run:
+          name: Inspection images
+          command: |
+            mkdir -p imgs && for i in 1 2 3 4 5 6; do head -c 30000 /dev/urandom > imgs/$i.bmp; done
+      - run:
+          name: Build with libtorch
+          command: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --target PcbDefect -j2
+      - run:
+          name: Detect solder bridges
+          command: ./build/PcbDefect imgs/ --threshold 0.6
+  minesweeperprob:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - checkout
+      - run:
+          name: Stage inputs
+          command: tar xzf egg.tgz
+      - run:
+          name: Set up compiler
+          command: sudo apt-get update && sudo apt-get install -y cmake g++
+      - run:
+          name: Board state
+          command: |
+            printf '%s\n' '1?10' '???0' '1?10' > board.txt
+      - run:
+          name: Compile with cc -O2
+          command: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --target minesweeperprob -j2
+      - run:
+          name: Mine probability per cell
+          command: ./build/minesweeperprob board.txt --mines 3
+  sentiment-reviews:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - checkout
+      - run:
+          name: Unpack bundle
+          command: tar xzf egg.tgz
+      - run:
+          name: Install dependencies
+          command: sudo apt-get update && sudo apt-get install -y cmake g++
+      - run:
+          name: Review sample
+          command: |
+            echo '很好用，推薦' > reviews.txt; echo '壞了兩次，不推' >> reviews.txt
+      - run:
+          name: pip wheel .
+          command: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --target sentiment-reviews -j2
+      - run:
+          name: Polarity scoring
+          command: ./build/sentiment-reviews reviews.txt --lang zh-tw
+  CustomsHs:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - checkout
+      - run:
+          name: Rehydrate tree
+          command: tar xzf egg.tgz
+      - run:
+          name: Prepare toolchain
+          command: sudo apt-get update && sudo apt-get install -y cmake g++
+      - run:
+          name: Item descriptions
+          command: |
+            LC_ALL=C echo 'stainless steel bolt m8' > items.txt; echo 'cotton t-shirt' >> items.txt
+      - run:
+          name: pip wheel .
+          command: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --target CustomsHs -j2
+      - run:
+          name: Classify HS codes
+          command: ./build/CustomsHs --top 3
+  addr_validate:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - checkout
+      - run:
+          name: Fetch corpus
+          command: tar xzf egg.tgz
+      - run:
+          name: Bring up build env
+          command: sudo apt-get update && sudo apt-get install -y cmake g++
+      - run:
+          name: Address batch
+          command: |
+            { echo 嘉義縣大林鎮; echo 台北市中正區重慶南路; } > batch.txt
+      - run:
+          name: pip wheel .
+          command: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --target addr_validate -j2
+      - run:
+          name: Normalize and validate
+          command: ./build/addr_validate batch.txt --country TW
+  pwa-shell:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - checkout
+      - run:
+          name: Checkout vendored deps
+          command: tar xzf egg.tgz
+      - run:
+          name: Install cmake and g++
+          command: sudo apt-get update && sudo apt-get install -y cmake g++
+      - run:
+          name: Service-worker stub
+          command: |
+            mkdir -p public && echo 'self.addEventListener("install",()=>{});' > public/sw.js
+      - run:
+          name: vite build
+          command: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --target pwa-shell -j2
+      - run:
+          name: Lighthouse PWA audit
+          command: ./build/pwa-shell public/ --preset mobile
+  WebhookRetry:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - checkout
+      - run:
+          name: Prime workspace
+          command: tar xzf egg.tgz
+      - run:
+          name: Provision deps
+          command: sudo apt-get update && sudo apt-get install -y cmake g++
+      - run:
+          name: Delivery log
+          command: |
+            seq 120 | sed 's#.*#POST /hook 503#' > deliveries.txt && printf '#!/bin/sh\nexit 0\n' > receiver.sh && chmod +x receiver.sh
+      - run:
+          name: cargo build
+          command: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --target WebhookRetry -j2
+      - run:
+          name: Exponential backoff replay
+          command: ./build/WebhookRetry deliveries.txt --base 2s --max 5
+  ocsp-stapler:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - checkout
+      - run:
+          name: Unpack payload
+          command: tar xzf egg.tgz
+      - run:
+          name: Set up build deps
+          command: sudo apt-get update && sudo apt-get install -y cmake g++
+      - run:
+          name: Cert placeholder
+          command: |
+            head -c 1200 /dev/urandom|base64 > cert.der.b64
+      - run:
+          name: make -s
+          command: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --target ocsp-stapler -j2
+      - run:
+          name: Fetch and cache staple
+          command: ./build/ocsp-stapler cert.der.b64 --ttl 1h
+  otaDelta:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - checkout
+      - run:
+          name: Restore snapshot
+          command: tar xzf egg.tgz
+      - run:
+          name: Install native deps
+          command: sudo apt-get update && sudo apt-get install -y cmake g++
+      - run:
+          name: Old and new images
+          command: |
+            head -c 200000 /dev/urandom > old.bin && cp old.bin new.bin && printf 'x' >> new.bin
+      - run:
+          name: cargo build --release -j4
+          command: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --target otaDelta -j2
+      - run:
+          name: Produce bsdiff delta
+          command: ./build/otaDelta old.bin new.bin --out delta.bin
+  monorepo-affected:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - checkout
+      - run:
+          name: Fetch sources
+          command: tar xzf egg.tgz
+      - run:
+          name: Bootstrap compiler
+          command: sudo apt-get update && sudo apt-get install -y cmake g++
+      - run:
+          name: Package graph
+          command: |
+            mkdir -p packages/a packages/b packages/c && (cd packages && touch a/package.json b/package.json c/package.json)
+      - run:
+          name: pnpm -r build
+          command: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --target monorepo-affected -j2
+      - run:
+          name: Compute affected packages
+          command: ./build/monorepo-affected --base main --head HEAD
+  umbra:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - checkout
+      - run:
+          name: Unroll archive
+          command: tar xzf egg.tgz
+      - run:
+          name: Prepare SDK
+          command: sudo apt-get update && sudo apt-get install -y cmake g++
+      - run:
+          name: Rasterise sample page
+          command: |
+            dd if=/dev/zero of=page.pgm bs=1024 count=96 2>/dev/null
+      - run:
+          name: mvn -q package
+          command: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --target umbra -j2
+      - run:
+          name: OCR the scanned page
+          command: ./build/umbra page.pgm --lang jpn+eng --psm 6
+  bridge_wind_load:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - checkout
+      - run:
+          name: Seed workspace
+          command: tar xzf egg.tgz
+      - run:
+          name: Provision toolchain
+          command: sudo apt-get update && sudo apt-get install -y cmake g++
+      - run:
+          name: Mesh the deck section
+          command: |
+            awk 'BEGIN{for(i=0;i<240;i++)printf "%d %.3f\n",i,i*0.125}' > deck.msh
+      - run:
+          name: gfortran -O2 solver.f90
+          command: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --target bridge_wind_load -j2
+      - run:
+          name: Steady-state wind pressure
+          command: ./build/bridge_wind_load deck.msh --u-ref 31.5 --theta 7
+  fsck-replay:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - checkout
+      - run:
+          name: Unpack sources
+          command: tar xzf egg.tgz
+      - run:
+          name: Install essentials
+          command: sudo apt-get update && sudo apt-get install -y cmake g++
+      - run:
+          name: Journal stub
+          command: |
+            dd if=/dev/urandom of=journal.bin bs=4096 count=256 2>/dev/null
+      - run:
+          name: make
+          command: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --target fsck-replay -j2
+      - run:
+          name: Replay journal and check inodes
+          command: ./build/fsck-replay journal.bin --fix
+  license-scan:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - checkout
+      - run:
+          name: Restore vendored sources
+          command: tar xzf egg.tgz
+      - run:
+          name: Provision build deps
+          command: sudo apt-get update && sudo apt-get install -y cmake g++
+      - run:
+          name: Vendor dir
+          command: |
+            mkdir -p vendor/libfoo vendor/libbar && touch vendor/libfoo/LICENSE vendor/libbar/COPYING
+      - run:
+          name: go build .
+          command: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --target license-scan -j2
+      - run:
+          name: Classify licenses, flag copyleft
+          command: ./build/license-scan vendor/ --policy permissive-only
+  ami-reader:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - checkout
+      - run:
+          name: Fetch fixtures
+          command: tar xzf egg.tgz
+      - run:
+          name: Install prerequisites
+          command: sudo apt-get update && sudo apt-get install -y cmake g++
+      - run:
+          name: Meter interval file
+          command: |
+            LC_ALL=C echo 'meter,ts,kwh' > ami.csv; seq 1 96|sed 's/^/M1,/;s/$/,0.4/' >> ami.csv
+      - run:
+          name: gradle build
+          command: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --target ami-reader -j2
+      - run:
+          name: Validate, estimate, edit (VEE)
+          command: ./build/ami-reader --rules standard
+  ratecardsync:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - checkout
+      - run:
+          name: Sync asset bundles
+          command: tar xzf egg.tgz
+      - run:
+          name: Provision compiler
+          command: sudo apt-get update && sudo apt-get install -y cmake g++
+      - run:
+          name: Price list
+          command: |
+            printf '%s,%s\n' basic 299 pro 899 team 2490 > prices.csv
+      - run:
+          name: dotnet build
+          command: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --target ratecardsync -j2
+      - run:
+          name: Diff against billing system
+          command: ./build/ratecardsync prices.csv --currency TWD
+  turbine_yaw:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - checkout
+      - run:
+          name: Unpack toolkit
+          command: tar xzf egg.tgz
+      - run:
+          name: Install toolchain
+          command: sudo apt-get update && sudo apt-get install -y cmake g++
+      - run:
+          name: Wind direction series
+          command: |
+            awk 'BEGIN{for(i=0;i<1440;i++)print 215}' > wind.txt
+      - run:
+          name: Compile with Intel Fortran
+          command: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --target turbine_yaw -j2
+      - run:
+          name: Yaw misalignment correction
+          command: ./build/turbine_yaw wind.txt --deadband 8
+  bikesharerebal:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - checkout
+      - run:
+          name: Hydrate workspace
+          command: tar xzf egg.tgz
+      - run:
+          name: Bootstrap toolchain
+          command: sudo apt-get update && sudo apt-get install -y cmake g++
+      - run:
+          name: Station fill levels
+          command: |
+            seq 1 80 > ids && shuf -i 0-20 -n 80 -r > lv && paste ids lv > fill.txt
+      - run:
+          name: cargo build --release
+          command: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --target bikesharerebal -j2
+      - run:
+          name: Rebalancing truck plan
+          command: ./build/bikesharerebal fill.txt --truck-cap 30
+  raid_rebuild:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - checkout
+      - run:
+          name: Extract sources
+          command: tar xzf egg.tgz
+      - run:
+          name: Prepare build environment
+          command: sudo apt-get update && sudo apt-get install -y cmake g++
+      - run:
+          name: Disk set
+          command: |
+            for d in 0 1 2 3; do truncate -s 2M disk$d.img; done
+      - run:
+          name: make -j2
+          command: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --target raid_rebuild -j2
+      - run:
+          name: Rebuild disk 2 at 50 MB/s cap
+          command: ./build/raid_rebuild disk0.img disk1.img disk2.img disk3.img --rebuild 2
+  ursa:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - checkout
+      - run:
+          name: Restore build cache
+          command: tar xzf egg.tgz
+      - run:
+          name: Install build tools
+          command: sudo apt-get update && sudo apt-get install -y cmake g++
+      - run:
+          name: Document set
+          command: |
+            echo '台北市信義區 新北市板橋區 嘉義縣大林鎮'|tr ' ' '\n' > docs.txt
+      - run:
+          name: npm run build
+          command: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --target ursa -j2
+      - run:
+          name: Index with pinyin tokenizer
+          command: ./build/ursa docs.txt --tokenizer pinyin --fuzzy 1
+  tz_recalc:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - checkout
+      - run:
+          name: Pull reference data
+          command: tar xzf egg.tgz
+      - run:
+          name: Provision SDK
+          command: sudo apt-get update && sudo apt-get install -y cmake g++
+      - run:
+          name: Zone list
+          command: |
+            printf '%s\n' Asia/Taipei Europe/Lisbon America/Sao_Paulo|sort > zones.txt
+      - run:
+          name: cargo build
+          command: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --target tz_recalc -j2
+      - run:
+          name: Recompute DST transitions 2027
+          command: ./build/tz_recalc zones.txt --year 2027
+  willow-x:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - checkout
+      - run:
+          name: Stage inputs
+          command: tar xzf egg.tgz
+      - run:
+          name: Set up compiler
+          command: sudo apt-get update && sudo apt-get install -y cmake g++
+      - run:
+          name: Signed digest placeholder
+          command: |
+            head -c 64 /dev/urandom|od -An -tx1|tr -d ' \n' > digest.hex
+      - run:
+          name: cargo build
+          command: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --target willow-x -j2
+      - run:
+          name: Verify PAdES signature chain
+          command: ./build/willow-x --tsa required
+  pumice:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - checkout
+      - run:
+          name: Unpack bundle
+          command: tar xzf egg.tgz
+      - run:
+          name: Install dependencies
+          command: sudo apt-get update && sudo apt-get install -y cmake g++
+      - run:
+          name: Password sample
+          command: |
+            head -c 256 /dev/urandom | tr -dc 'A-Za-z0-9' | cut -c1-16 > pw.txt
+      - run:
+          name: cargo build --release
+          command: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --target pumice -j2
+      - run:
+          name: Benchmark cost factors 10-14
+          command: ./build/pumice pw.txt --costs 10,11,12,13,14
+
+workflows:
+  main:
+    jobs:
+      - dnsZoneLint
+      - walnut
+      - InvMppt
+      - fuel-plan-rcss
+      - leaf_wetness
+      - sched-cfs-sim
+      - crosswordFill
+      - PcbDefect
+      - minesweeperprob
+      - sentiment-reviews
+      - CustomsHs
+      - addr_validate
+      - pwa-shell
+      - WebhookRetry
+      - ocsp-stapler
+      - otaDelta
+      - monorepo-affected
+      - umbra
+      - bridge_wind_load
+      - fsck-replay
+      - license-scan
+      - ami-reader
+      - ratecardsync
+      - turbine_yaw
+      - bikesharerebal
+      - raid_rebuild
+      - ursa
+      - tz_recalc
+      - willow-x
+      - pumice
